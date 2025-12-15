@@ -1,24 +1,7 @@
 services:
-  app:
-    build: .
-    container_name: nemasa-nest-app
-    ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
-    environment:
-      - DB_HOST=db
-      - DB_PORT=${DB_PORT}
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - nemasa-network
-
   db:
     image: postgres:15-alpine
-    container_name: nemasa-nest-db
+    container_name: nest-db
     ports:
       - "${DB_PORT}:5432"
     environment:
@@ -28,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - nemasa-network
+      - nest-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
       interval: 10s
@@ -39,4 +22,4 @@ volumes:
   postgres_data:
 
 networks:
-  nemasa-network:
+  nest-network:
