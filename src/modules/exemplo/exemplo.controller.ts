@@ -1,13 +1,17 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ExemploService } from './exemplo.service';
 import { CreateExemploDto } from './dto/create-exemplo.dto';
 import { UpdateExemploDto } from './dto/update-exemplo.dto';
 import { ExemploResponseDto } from './dto/exemplo-response.dto';
-import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { BaseQueryDto } from 'src/common/dto/base-query.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('exemplos')
 @Controller('api/v1/exemplos')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class ExemploController {
 	constructor(private readonly exemploService: ExemploService) { }
 
