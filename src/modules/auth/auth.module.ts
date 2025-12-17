@@ -9,6 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { OAuthService } from './services/oauth.service';
 
 @Module({
 	imports: [
@@ -23,7 +24,7 @@ import { RolesGuard } from './guards/roles.guard';
 		}),
 	],
 	controllers: [AuthController],
-	providers: [AuthService, JwtStrategy, JwtRefreshStrategy, JwtAuthGuard, RolesGuard],
+	providers: [AuthService, OAuthService, JwtStrategy, JwtRefreshStrategy, JwtAuthGuard, RolesGuard],
 	exports: [AuthService, JwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}

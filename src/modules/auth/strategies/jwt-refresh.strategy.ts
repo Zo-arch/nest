@@ -3,7 +3,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserService } from '../../user/user.service';
+import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { RequestUser } from './jwt.strategy';
 
+/**
+ * Strategy para validação de refresh tokens
+ * Nota: Atualmente não está sendo usada, pois a validação é feita diretamente no AuthService
+ * Mantida para uso futuro caso necessário
+ */
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
 	constructor(
@@ -17,7 +24,7 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
 		});
 	}
 
-	async validate(payload: any) {
+	async validate(payload: JwtPayload): Promise<RequestUser> {
 		const user = await this.userService.findById(payload.sub);
 		
 		if (!user || !user.ativo) {

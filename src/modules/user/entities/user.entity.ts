@@ -1,12 +1,8 @@
 import { Entity, Column, BeforeInsert, BeforeUpdate } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { ApiProperty } from '@nestjs/swagger';
+import { UserRole, AuthProvider } from '../../../common/enums';
 import * as bcrypt from 'bcrypt';
-
-export enum UserRole {
-	USER = 'user',
-	ADMIN = 'admin',
-}
 
 @Entity('users')
 export class User extends BaseEntity {
@@ -18,8 +14,8 @@ export class User extends BaseEntity {
 	@Column({ length: 255 })
 	nome: string;
 
-	@Column({ length: 255 })
-	password: string;
+	@Column({ nullable: true, length: 255 })
+	password?: string;
 
 	@ApiProperty({ example: [UserRole.USER], enum: UserRole, isArray: true })
 	@Column({
@@ -32,7 +28,6 @@ export class User extends BaseEntity {
 
 	@Column({ nullable: true, length: 500 })
 	refreshToken?: string;
-
 
 	@Column({ nullable: true, type: 'timestamp' })
 	passwordResetExpires?: Date;
@@ -54,6 +49,17 @@ export class User extends BaseEntity {
 	@Column({ nullable: true, length: 6 })
 	passwordResetCode?: string;
 
+	@ApiProperty({ example: AuthProvider.LOCAL, enum: AuthProvider })
+	@Column({
+		type: 'enum',
+		enum: AuthProvider,
+		default: AuthProvider.LOCAL,
+	})
+	provider: AuthProvider;
+
+	@Column({ nullable: true, length: 255 })
+	providerId?: string;
+
 	@BeforeInsert()
 	async hashPassword() {
 		if (this.password && !this.password.startsWith('$2b$')) {
@@ -72,6 +78,9 @@ export class User extends BaseEntity {
 	}
 
 	async validatePassword(password: string): Promise<boolean> {
+		if (!this.password) {
+			return false;
+		}
 		return bcrypt.compare(password, this.password);
 	}
 }

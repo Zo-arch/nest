@@ -1,7 +1,6 @@
 import {
 	Injectable,
 	UnauthorizedException,
-	BadRequestException,
 	ForbiddenException,
 } from '@nestjs/common';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
@@ -16,8 +15,16 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserResponseDto } from '../user/dto/user-response.dto';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { OAuthService, SocialUserData } from './services/oauth.service';
+import { AuthProvider } from '../../common/enums';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
+
+// Constantes para configuração
+const VERIFICATION_CODE_EXPIRATION_HOURS = 24;
+const PASSWORD_RESET_EXPIRATION_HOURS = 1;
+const VERIFICATION_CODE_LENGTH = 6;
 
 @Injectable()
 export class AuthService {
@@ -25,6 +32,7 @@ export class AuthService {
 		private userService: UserService,
 		private jwtService: JwtService,
 		private configService: ConfigService,
+		private oauthService: OAuthService,
 	) { }
 
 	async register(registerDto: RegisterDto, requireEmailVerification: boolean = true): Promise<AuthResponseDto> {
@@ -38,7 +46,7 @@ export class AuthService {
 		if (requireEmailVerification) {
 			const verificationCode = this.generateVerificationCode();
 			const expires = new Date();
-			expires.setHours(expires.getHours() + 24); // Código expira em 24 horas
+			expires.setHours(expires.getHours() + VERIFICATION_CODE_EXPIRATION_HOURS);
 
 			await this.userService.setEmailVerificationCode(user.email, verificationCode, expires);
 
@@ -105,7 +113,7 @@ export class AuthService {
 
 	async refreshToken(refreshTokenDto: RefreshTokenDto): Promise<{ accessToken: string }> {
 		try {
-			const payload = this.jwtService.verify(refreshTokenDto.refreshToken, {
+			const payload = this.jwtService.verify<JwtPayload>(refreshTokenDto.refreshToken, {
 				secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
 			});
 
@@ -146,7 +154,7 @@ export class AuthService {
 
 		const resetCode = this.generateVerificationCode();
 		const expires = new Date();
-		expires.setHours(expires.getHours() + 1);
+		expires.setHours(expires.getHours() + PASSWORD_RESET_EXPIRATION_HOURS);
 
 		await this.userService.setPasswordResetCode(user.email, resetCode, expires);
 
@@ -157,20 +165,13 @@ export class AuthService {
 	}
 
 	async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
-		await this.userService.resetPassword(resetPasswordDto.code, resetPasswordDto.newPassword);
+		await this.userService.resetPassword(
+			resetPasswordDto.email,
+			resetPasswordDto.code,
+			resetPasswordDto.newPassword,
+		);
 
 		return { message: 'Senha alterada com sucesso' };
-	}
-
-	async validateUser(email: string, password: string): Promise<any> {
-		const user = await this.userService.findByEmail(email);
-
-		if (user && (await user.validatePassword(password))) {
-			const { password: _, ...result } = user;
-			return result;
-		}
-
-		return null;
 	}
 
 	async getProfile(userId: number): Promise<UserResponseDto> {
@@ -196,7 +197,7 @@ export class AuthService {
 
 		const verificationCode = this.generateVerificationCode();
 		const expires = new Date();
-		expires.setHours(expires.getHours() + 24); // Código expira em 24 horas
+		expires.setHours(expires.getHours() + VERIFICATION_CODE_EXPIRATION_HOURS);
 
 		await this.userService.setEmailVerificationCode(user.email, verificationCode, expires);
 
@@ -206,13 +207,85 @@ export class AuthService {
 		return { message: 'Se o email existir e não estiver verificado, um novo código foi enviado' };
 	}
 
+	async socialLogin(socialUserData: SocialUserData, provider: AuthProvider): Promise<AuthResponseDto> {
+		// Buscar usuário por providerId primeiro
+		let user = await this.userService.findByProviderId(provider, socialUserData.providerId);
+
+		// Se não encontrar por providerId, buscar por email
+		if (!user) {
+			user = await this.userService.findByEmail(socialUserData.email);
+		}
+
+		if (!user) {
+			// Criar novo usuário
+			const newUser = await this.userService.create({
+				email: socialUserData.email,
+				nome: socialUserData.nome,
+				provider,
+				providerId: socialUserData.providerId,
+				// Não definir senha para usuários sociais
+			});
+
+			// Marcar email como verificado (OAuth já valida o email)
+			await this.userService.markEmailAsVerified(newUser.id);
+
+			// Gerar tokens
+			const tokens = await this.generateTokens(newUser.id, newUser.email);
+			await this.userService.updateRefreshToken(newUser.id, tokens.refreshToken);
+
+			const updatedUser = await this.userService.findById(newUser.id);
+
+			return {
+				user: updatedUser,
+				...tokens,
+			};
+		} else {
+			// Usuário já existe
+			// Atualizar providerId se necessário (caso o usuário tenha se registrado com email e depois fez login social)
+			if (user.provider !== provider || user.providerId !== socialUserData.providerId) {
+				await this.userService.update(user.id, {
+					provider,
+					providerId: socialUserData.providerId,
+				} as any);
+			}
+
+			// Garantir que email está verificado
+			if (!user.emailVerified) {
+				await this.userService.markEmailAsVerified(user.id);
+			}
+
+			// Gerar tokens
+			const tokens = await this.generateTokens(user.id, user.email);
+			await this.userService.updateRefreshToken(user.id, tokens.refreshToken);
+
+			const updatedUser = await this.userService.findById(user.id);
+
+			return {
+				user: updatedUser,
+				...tokens,
+			};
+		}
+	}
+
+	async loginWithGoogle(token: string): Promise<AuthResponseDto> {
+		const socialUserData = await this.oauthService.validateGoogleToken(token);
+		return this.socialLogin(socialUserData, AuthProvider.GOOGLE);
+	}
+
+	async loginWithApple(token: string): Promise<AuthResponseDto> {
+		const socialUserData = await this.oauthService.validateAppleToken(token);
+		return this.socialLogin(socialUserData, AuthProvider.APPLE);
+	}
+
 	private generateVerificationCode(): string {
-		// Gera um código de 6 dígitos (000000 a 999999)
-		return Math.floor(100000 + Math.random() * 900000).toString();
+		// Gera um código de 6 dígitos criptograficamente seguro (000000 a 999999)
+		const randomBytes = crypto.randomBytes(3);
+		const code = parseInt(randomBytes.toString('hex'), 16) % 1000000;
+		return code.toString().padStart(VERIFICATION_CODE_LENGTH, '0');
 	}
 
 	private async generateTokens(userId: number, email: string) {
-		const payload = { sub: userId, email };
+		const payload: JwtPayload = { sub: userId, email };
 
 		const accessToken = this.jwtService.sign(payload, {
 			expiresIn: this.configService.get<string>('JWT_EXPIRATION', '15m'),

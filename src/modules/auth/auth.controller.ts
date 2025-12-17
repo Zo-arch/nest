@@ -11,6 +11,8 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
+import { AppleLoginDto } from './dto/apple-login.dto';
 import { Public } from './decorators/public.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -105,13 +107,33 @@ export class AuthController {
 		return this.authService.resendVerificationEmail(resendVerificationDto);
 	}
 
+	@Public()
+	@Post('google')
+	@Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 tentativas por minuto
+	@ApiOperation({ summary: 'Login ou registro com Google' })
+	@ApiResponse({ status: 200, description: 'Login realizado com sucesso', type: AuthResponseDto })
+	@ApiResponse({ status: 401, description: 'Token do Google inválido' })
+	async loginWithGoogle(@Body() googleLoginDto: GoogleLoginDto): Promise<AuthResponseDto> {
+		return this.authService.loginWithGoogle(googleLoginDto.token);
+	}
+
+	@Public()
+	@Post('apple')
+	@Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 tentativas por minuto
+	@ApiOperation({ summary: 'Login ou registro com Apple' })
+	@ApiResponse({ status: 200, description: 'Login realizado com sucesso', type: AuthResponseDto })
+	@ApiResponse({ status: 401, description: 'Token do Apple inválido' })
+	async loginWithApple(@Body() appleLoginDto: AppleLoginDto): Promise<AuthResponseDto> {
+		return this.authService.loginWithApple(appleLoginDto.token);
+	}
+
 	@UseGuards(JwtAuthGuard)
 	@Get('me')
 	@ApiBearerAuth()
 	@ApiOperation({ summary: 'Retorna informações do usuário autenticado' })
 	@ApiResponse({ status: 200, description: 'Informações do usuário', type: UserResponseDto })
 	@ApiResponse({ status: 401, description: 'Não autenticado' })
-	async getProfile(@CurrentUser() user: any): Promise<UserResponseDto> {
+	async getProfile(@CurrentUser() user): Promise<UserResponseDto> {
 		return this.authService.getProfile(user.id);
 	}
 }

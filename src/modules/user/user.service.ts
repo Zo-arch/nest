@@ -1,7 +1,8 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, UserRole } from './entities/user.entity';
+import { User } from './entities/user.entity';
+import { UserRole, AuthProvider } from '../../common/enums';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import * as bcrypt from 'bcrypt';
@@ -25,9 +26,10 @@ export class UserService {
 		const user = this.userRepository.create({
 			...createUserDto,
 			roles: createUserDto.roles || [UserRole.USER],
+			provider: createUserDto.provider || AuthProvider.LOCAL,
 		});
 
-		// Hash será feito pelo @BeforeInsert hook da entidade
+		// Hash será feito pelo @BeforeInsert hook da entidade (apenas se tiver senha)
 		const savedUser = await this.userRepository.save(user);
 
 		// Remover campos sensíveis do retorno
@@ -45,6 +47,12 @@ export class UserService {
 
 	async findByEmail(email: string): Promise<User | null> {
 		return this.userRepository.findOne({ where: { email } });
+	}
+
+	async findByProviderId(provider: AuthProvider, providerId: string): Promise<User | null> {
+		return this.userRepository.findOne({
+			where: { provider, providerId },
+		});
 	}
 
 	async findById(id: number): Promise<UserResponseDto> {
@@ -90,13 +98,17 @@ export class UserService {
 		);
 	}
 
-	async resetPassword(code: string, newPassword: string): Promise<void> {
+	async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
 		const user = await this.userRepository.findOne({
-			where: { passwordResetCode: code },
+			where: { email, passwordResetCode: code },
 		});
 
-		if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
-			throw new NotFoundException('Código inválido ou expirado');
+		if (!user) {
+			throw new NotFoundException('Código inválido ou não corresponde ao email informado');
+		}
+
+		if (!user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+			throw new NotFoundException('Código expirado');
 		}
 
 		user.password = newPassword;
@@ -122,15 +134,6 @@ export class UserService {
 	}
 
 	async verifyEmail(email: string, code: string): Promise<void> {
-		// Se código vazio, apenas marcar como verificado (para development)
-		if (!code) {
-			const user = await this.userRepository.findOne({ where: { email } });
-			if (user) {
-				await this.markEmailAsVerified(user.id);
-			}
-			return;
-		}
-
 		const user = await this.userRepository.findOne({
 			where: {
 				email,
@@ -159,6 +162,10 @@ export class UserService {
 			emailVerificationCode: undefined,
 			emailVerificationExpires: undefined,
 		});
+	}
+
+	async update(userId: number, updateData: Partial<User>): Promise<void> {
+		await this.userRepository.update(userId, updateData);
 	}
 }
 

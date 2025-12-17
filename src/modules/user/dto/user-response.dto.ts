@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '../entities/user.entity';
+import { UserRole, AuthProvider } from '../../../common/enums';
 
 export class UserResponseDto {
 	@ApiProperty({ example: 1 })
@@ -19,6 +19,12 @@ export class UserResponseDto {
 
 	@ApiProperty({ example: false })
 	emailVerified: boolean;
+
+	@ApiProperty({ example: AuthProvider.LOCAL, enum: AuthProvider })
+	provider: AuthProvider;
+
+	@ApiProperty({ example: '123456789', required: false })
+	providerId?: string;
 
 	@ApiProperty({ example: 1 })
 	version: number;
