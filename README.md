@@ -197,30 +197,6 @@ To customize this template for a new project, search for:
 - `example-project-network` - Docker network name
 - `example-project-postgres-data` - Docker volume name
 
-## 📦 Deployment
-
-### AWS EC2 + PM2
-
-1. Set up EC2 instance
-2. Install Node.js and PM2
-3. Clone repository
-4. Configure `.env` file
-5. Build and start with PM2:
-
-```bash
-npm run build
-pm2 start dist/main.js --name example-project-api
-pm2 save
-pm2 startup
-```
-
-### Docker Production
-
-```bash
-docker build -t example-project-backend .
-docker run -d --name example-project-app -p 3000:3000 --env-file .env example-project-backend
-```
-
 ## 📄 License
 
 This project is licensed under the MIT License.
